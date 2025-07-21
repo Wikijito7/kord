@@ -21,6 +21,7 @@ public class DefaultVoiceGatewayBuilder(
     public var client: HttpClient? = null
     public var reconnectRetry: Retry? = null
     public var eventFlow: MutableSharedFlow<VoiceEvent> = MutableSharedFlow(extraBufferCapacity = Int.MAX_VALUE)
+    public var maxDaveProtocolVersion: Int = 0
 
     public fun build(): DefaultVoiceGateway {
         val client = client ?: HttpClient(OkHttp) {
@@ -37,7 +38,8 @@ public class DefaultVoiceGatewayBuilder(
             sessionId,
             client,
             retry,
-            eventFlow
+            eventFlow,
+            maxDaveProtocolVersion
         )
 
         return DefaultVoiceGateway(data)

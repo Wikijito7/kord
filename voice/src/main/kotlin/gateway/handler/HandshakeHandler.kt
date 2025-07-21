@@ -16,7 +16,8 @@ internal class HandshakeHandler(
             data.guildId,
             data.selfId,
             data.sessionId,
-            configuration.token
+            configuration.token,
+            data.maxDaveProtocolVersion
         )
 
     override suspend fun start() = coroutineScope {

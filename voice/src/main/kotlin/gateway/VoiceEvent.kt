@@ -39,12 +39,21 @@ public sealed class VoiceEvent {
                 OpCode.Speaking -> decodeEvent(decoder, op, Speaking.serializer(), d)
                 OpCode.HeartbeatAck -> decodeEvent(decoder, op, HeartbeatAck.serializer(), d)
                 OpCode.Hello -> decodeEvent(decoder, op, Hello.serializer(), d)
+                OpCode.ClientsConnect -> decodeEvent(decoder, op, ClientsConnect.serializer(), d)
+                OpCode.DaveProtocolPrepareTransition -> decodeEvent(decoder, op, DaveProtocolPrepareTransition.serializer(), d)
+                OpCode.DaveProtocolExecuteTransition -> decodeEvent(decoder, op, DaveProtocolExecuteTransition.serializer(), d)
+                OpCode.DaveProtocolPrepareEpoch -> decodeEvent(decoder, op, DaveProtocolPrepareEpoch.serializer(), d)
+                OpCode.DaveMlsExternalSenderPackage -> decodeEvent(decoder, op, DaveMlsExternalSenderPackage.serializer(), d)
+                OpCode.DaveMlsProposals -> decodeEvent(decoder, op, DaveMlsProposals.serializer(), d)
+                OpCode.DaveMlsAnnounceCommitTransition -> decodeEvent(decoder, op, DaveMlsAnnounceCommitTransition.serializer(), d)
+                OpCode.DaveMlsWelcome -> decodeEvent(decoder, op, DaveMlsWelcome.serializer(), d)
                 OpCode.Resumed -> {
                     // ignore the d field, Resumed is supposed to have null here:
                     // https://discord.com/developers/docs/topics/voice-connections#resuming-voice-connection-example-resumed-payload
                     Resumed
                 }
                 OpCode.Identify, OpCode.SelectProtocol, OpCode.Heartbeat, OpCode.Resume, OpCode.ClientDisconnect,
+                OpCode.DaveProtocolReadyForTransition, OpCode.DaveMlsKeyPackage, OpCode.DaveMlsCommitWelcome, OpCode.DaveMlsInvalidCommitWelcome,
                 OpCode.Unknown,
                 -> {
                     jsonLogger.debug { "Unknown voice gateway event with opcode $op : $d" }
@@ -95,7 +104,9 @@ public data class HeartbeatAck(val nonce: Long) : VoiceEvent() {
 public data class SessionDescription(
     val mode: EncryptionMode,
     @SerialName("secret_key")
-    val secretKey: List<UByte>
+    val secretKey: List<UByte>,
+    @SerialName("dave_protocol_version")
+    val daveProtocolVersion: Int = 0
 ) : VoiceEvent()
 
 @Serializable
@@ -154,4 +165,139 @@ public sealed class Close : VoiceEvent() {
      *  The user is free to manually connect again using [VoiceGateway.start], otherwise all resources linked to the Gateway should free.
      */
     public object RetryLimitReached : Close()
+}
+
+@Serializable
+public data class ClientsConnect(
+    @SerialName("user_ids")
+    val userIds: List<Snowflake>
+) : VoiceEvent()
+
+@Serializable
+public data class DaveProtocolPrepareTransition(
+    @SerialName("protocol_version")
+    val protocolVersion: Int,
+    @SerialName("transition_id")
+    val transitionId: Int
+) : VoiceEvent()
+
+@Serializable
+public data class DaveProtocolExecuteTransition(
+    @SerialName("transition_id")
+    val transitionId: Int
+) : VoiceEvent()
+
+@Serializable
+public data class DaveProtocolPrepareEpoch(
+    @SerialName("protocol_version")
+    val protocolVersion: Int,
+    @SerialName("epoch")
+    val epoch: Int,
+    @SerialName("transition_id")
+    val transitionId: Int
+) : VoiceEvent()
+
+@Serializable
+public data class DaveMlsExternalSenderPackage(
+    @SerialName("signature_key")
+    val signatureKey: ByteArray,
+    @SerialName("credential")
+    val credential: ByteArray
+) : VoiceEvent() {
+    override fun equals(other: Any?): Boolean {
+        if (this === other) return true
+        if (javaClass != other?.javaClass) return false
+        other as DaveMlsExternalSenderPackage
+        if (!signatureKey.contentEquals(other.signatureKey)) return false
+        return credential.contentEquals(other.credential)
+    }
+
+    override fun hashCode(): Int {
+        var result = signatureKey.contentHashCode()
+        result = 31 * result + credential.contentHashCode()
+        return result
+    }
+}
+
+@Serializable
+public data class DaveMlsProposals(
+    @SerialName("operation_type")
+    val operationType: String, // "append" or "revoke"
+    @SerialName("proposal_messages")
+    val proposalMessages: List<ByteArray>? = null,
+    @SerialName("proposal_refs")
+    val proposalRefs: List<ByteArray>? = null
+) : VoiceEvent() {
+    override fun equals(other: Any?): Boolean {
+        if (this === other) return true
+        if (javaClass != other?.javaClass) return false
+        other as DaveMlsProposals
+        if (operationType != other.operationType) return false
+        if (proposalMessages != null) {
+            if (other.proposalMessages == null) return false
+            if (proposalMessages.size != other.proposalMessages.size) return false
+            for (i in proposalMessages.indices) {
+                if (!proposalMessages[i].contentEquals(other.proposalMessages[i])) return false
+            }
+        } else if (other.proposalMessages != null) return false
+        if (proposalRefs != null) {
+            if (other.proposalRefs == null) return false
+            if (proposalRefs.size != other.proposalRefs.size) return false
+            for (i in proposalRefs.indices) {
+                if (!proposalRefs[i].contentEquals(other.proposalRefs[i])) return false
+            }
+        } else if (other.proposalRefs != null) return false
+        return true
+    }
+
+    override fun hashCode(): Int {
+        var result = operationType.hashCode()
+        result = 31 * result + (proposalMessages?.map { it.contentHashCode() }?.hashCode() ?: 0)
+        result = 31 * result + (proposalRefs?.map { it.contentHashCode() }?.hashCode() ?: 0)
+        return result
+    }
+}
+
+@Serializable
+public data class DaveMlsAnnounceCommitTransition(
+    @SerialName("transition_id")
+    val transitionId: Int,
+    @SerialName("commit_message")
+    val commitMessage: ByteArray
+) : VoiceEvent() {
+    override fun equals(other: Any?): Boolean {
+        if (this === other) return true
+        if (javaClass != other?.javaClass) return false
+        other as DaveMlsAnnounceCommitTransition
+        if (transitionId != other.transitionId) return false
+        return commitMessage.contentEquals(other.commitMessage)
+    }
+
+    override fun hashCode(): Int {
+        var result = transitionId
+        result = 31 * result + commitMessage.contentHashCode()
+        return result
+    }
+}
+
+@Serializable
+public data class DaveMlsWelcome(
+    @SerialName("transition_id")
+    val transitionId: Int,
+    @SerialName("welcome_message")
+    val welcomeMessage: ByteArray
+) : VoiceEvent() {
+    override fun equals(other: Any?): Boolean {
+        if (this === other) return true
+        if (javaClass != other?.javaClass) return false
+        other as DaveMlsWelcome
+        if (transitionId != other.transitionId) return false
+        return welcomeMessage.contentEquals(other.welcomeMessage)
+    }
+
+    override fun hashCode(): Int {
+        var result = transitionId
+        result = 31 * result + welcomeMessage.contentHashCode()
+        return result
+    }
 }

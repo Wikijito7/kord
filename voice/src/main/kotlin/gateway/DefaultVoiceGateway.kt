@@ -36,7 +36,8 @@ public data class DefaultVoiceGatewayData(
     val sessionId: String,
     val client: HttpClient,
     val reconnectRetry: Retry,
-    val eventFlow: MutableSharedFlow<VoiceEvent>
+    val eventFlow: MutableSharedFlow<VoiceEvent>,
+    val maxDaveProtocolVersion: Int = 0
 )
 
 /**

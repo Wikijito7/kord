@@ -43,6 +43,22 @@ public sealed class Command {
                     composite.encodeSerializableElement(descriptor, 0, OpCode.serializer(), OpCode.Resume)
                     composite.encodeSerializableElement(descriptor, 1, Resume.serializer(), value)
                 }
+                is DaveProtocolReadyForTransition -> {
+                    composite.encodeSerializableElement(descriptor, 0, OpCode.serializer(), OpCode.DaveProtocolReadyForTransition)
+                    composite.encodeSerializableElement(descriptor, 1, DaveProtocolReadyForTransition.serializer(), value)
+                }
+                is DaveMlsKeyPackage -> {
+                    composite.encodeSerializableElement(descriptor, 0, OpCode.serializer(), OpCode.DaveMlsKeyPackage)
+                    composite.encodeSerializableElement(descriptor, 1, DaveMlsKeyPackage.serializer(), value)
+                }
+                is DaveMlsCommitWelcome -> {
+                    composite.encodeSerializableElement(descriptor, 0, OpCode.serializer(), OpCode.DaveMlsCommitWelcome)
+                    composite.encodeSerializableElement(descriptor, 1, DaveMlsCommitWelcome.serializer(), value)
+                }
+                is DaveMlsInvalidCommitWelcome -> {
+                    composite.encodeSerializableElement(descriptor, 0, OpCode.serializer(), OpCode.DaveMlsInvalidCommitWelcome)
+                    composite.encodeSerializableElement(descriptor, 1, DaveMlsInvalidCommitWelcome.serializer(), value)
+                }
             }
 
             composite.endStructure(descriptor)
@@ -58,7 +74,9 @@ public data class Identify(
     val userId: Snowflake,
     @SerialName("session_id")
     val sessionId: String,
-    val token: String
+    val token: String,
+    @SerialName("max_dave_protocol_version")
+    val maxDaveProtocolVersion: Int = 0
 ) : Command()
 
 @Serializable
@@ -92,4 +110,61 @@ public data class Resume(
     val serverId: Snowflake,
     val sessionId: String,
     val token: String
+) : Command()
+
+@KordVoice
+@Serializable
+public data class DaveProtocolReadyForTransition(
+    @SerialName("transition_id")
+    val transitionId: Int
+) : Command()
+
+@KordVoice
+@Serializable
+public data class DaveMlsKeyPackage(
+    @SerialName("key_package")
+    val keyPackage: ByteArray
+) : Command() {
+    override fun equals(other: Any?): Boolean {
+        if (this === other) return true
+        if (javaClass != other?.javaClass) return false
+        other as DaveMlsKeyPackage
+        return keyPackage.contentEquals(other.keyPackage)
+    }
+
+    override fun hashCode(): Int = keyPackage.contentHashCode()
+}
+
+@KordVoice
+@Serializable
+public data class DaveMlsCommitWelcome(
+    @SerialName("commit_message")
+    val commitMessage: ByteArray,
+    @SerialName("welcome_message")
+    val welcomeMessage: ByteArray?
+) : Command() {
+    override fun equals(other: Any?): Boolean {
+        if (this === other) return true
+        if (javaClass != other?.javaClass) return false
+        other as DaveMlsCommitWelcome
+        if (!commitMessage.contentEquals(other.commitMessage)) return false
+        if (welcomeMessage != null) {
+            if (other.welcomeMessage == null) return false
+            if (!welcomeMessage.contentEquals(other.welcomeMessage)) return false
+        } else if (other.welcomeMessage != null) return false
+        return true
+    }
+
+    override fun hashCode(): Int {
+        var result = commitMessage.contentHashCode()
+        result = 31 * result + (welcomeMessage?.contentHashCode() ?: 0)
+        return result
+    }
+}
+
+@KordVoice
+@Serializable
+public data class DaveMlsInvalidCommitWelcome(
+    @SerialName("transition_id")
+    val transitionId: Int
 ) : Command()

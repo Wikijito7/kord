@@ -17,6 +17,9 @@ import dev.kord.voice.streams.DefaultStreams
 import dev.kord.voice.streams.NOPStreams
 import dev.kord.voice.streams.Streams
 import dev.kord.voice.udp.*
+import dev.kord.voice.dave.DaveProtocol
+import dev.kord.voice.dave.DefaultDaveProtocol
+import dev.kord.voice.handlers.DaveProtocolHandler
 import kotlinx.coroutines.async
 import kotlinx.coroutines.coroutineScope
 import kotlinx.coroutines.flow.filter
@@ -105,10 +108,27 @@ public class VoiceConnectionBuilder(
     public var connectionDetachDuration: Duration = 100.milliseconds
 
     /**
+     * A [DaveProtocol] implementation to be used for end-to-end encryption. If null, a default implementation will be used.
+     */
+    public var daveProtocol: DaveProtocol? = null
+
+    /**
+     * Whether to enable DAVE protocol support for end-to-end encryption. Default is true.
+     */
+    public var enableDaveProtocol: Boolean = true
+
+    /**
      * A builder to customize the voice connection's underlying [VoiceGateway].
      */
     public fun voiceGateway(builder: DefaultVoiceGatewayBuilder.() -> Unit) {
         this.voiceGatewayBuilder = builder
+    }
+
+    /**
+     * Sets the DAVE protocol implementation for end-to-end encryption.
+     */
+    public fun daveProtocol(protocol: DaveProtocol) {
+        this.daveProtocol = protocol
     }
 
     private suspend fun Gateway.updateVoiceState(): Pair<VoiceConnectionData, VoiceGatewayConfiguration> = coroutineScope {
@@ -162,7 +182,13 @@ public class VoiceConnectionBuilder(
         val (voiceConnectionData, initialGatewayConfiguration) = gateway.updateVoiceState()
 
         val voiceGateway = DefaultVoiceGatewayBuilder(selfId, guildId, voiceConnectionData.sessionId)
-            .also { voiceGatewayBuilder?.invoke(it) }
+            .also { 
+                // Enable DAVE protocol support in the voice gateway
+                if (enableDaveProtocol) {
+                    it.maxDaveProtocolVersion = daveProtocol?.maxProtocolVersion ?: 1
+                }
+                voiceGatewayBuilder?.invoke(it) 
+            }
             .build()
         val udpSocket = udpSocket ?: GlobalVoiceUdpSocket
         val audioProvider = audioProvider ?: EmptyAudioPlayerProvider
@@ -180,7 +206,7 @@ public class VoiceConnectionBuilder(
         val streams =
             streams ?: if (receiveVoice) DefaultStreams(voiceGateway, udpSocket, nonceStrategy) else NOPStreams
 
-        return VoiceConnection(
+        val voiceConnection = VoiceConnection(
             voiceConnectionData,
             gateway,
             voiceGateway,
@@ -193,6 +219,24 @@ public class VoiceConnectionBuilder(
             nonceStrategy,
             connectionDetachDuration
         )
+
+        // Initialize DAVE protocol if enabled
+        if (enableDaveProtocol) {
+            val daveProtocolImpl = daveProtocol ?: DefaultDaveProtocol(selfId)
+            
+            // Start the DAVE protocol handler
+            with(voiceConnection.scope) {
+                kotlinx.coroutines.launch {
+                    DaveProtocolHandler(
+                        voiceGateway.events,
+                        voiceConnection,
+                        daveProtocolImpl
+                    ).start()
+                }
+            }
+        }
+
+        return voiceConnection
     }
 
     // we can't use the SAM feature or else we break the IR backend, so lets just use this object instead
